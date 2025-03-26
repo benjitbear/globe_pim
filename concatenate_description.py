@@ -1,41 +1,33 @@
 import pandas as pd
 import re
 import os
-import chardet
 
-def process_csv_year_data():
+def process_excel_year_data():
     """
-    Loads a CSV file, parses year data, concatenates specified columns (skipping empty cells),
+    Loads an Excel file, parses year data, concatenates specified columns (skipping empty cells),
     flags concatenated data exceeding 60 characters, and saves to a new CSV file with logging.
     """
 
     try:
-        input_file = input("Enter the path to the input CSV file: ")
+        input_file = input("Enter the path to the input Excel file: ")
 
         if not os.path.exists(input_file):
             raise FileNotFoundError(f"File not found: {input_file}")
 
-        if not input_file.lower().endswith(".csv"):
-            raise ValueError("Input file must be a CSV file (.csv)")
+        if not input_file.lower().endswith(".xlsx"):
+            raise ValueError("Input file must be an Excel file (.xlsx)")
 
-        print(f"Logging: Reading CSV file: {input_file}")
+        print(f"Logging: Reading Excel file: {input_file}")
 
-        # Detect encoding using chardet
-        with open(input_file, 'rb') as f:
-            result = chardet.detect(f.read())
-            encoding = result['encoding']
-
-        print(f"Logging: Detected encoding: {encoding}")
-
-        # Read CSV with low_memory=False to handle mixed types
-        df = pd.read_csv(input_file, encoding=encoding, low_memory=False)
+        # Read Excel file
+        df = pd.read_excel(input_file)
 
         # Identify required columns
-        required_columns = ["X_veh_manufacturer", "X_manufacturer_model", "X_body_type", "X_year"]
+        required_columns = ["X_veh_manufacturer", "X_manufacturer_model", "X_body_type", "X_year", "Description"]
 
         for col in required_columns:
             if col not in df.columns:
-                raise ValueError(f"Column '{col}' not found in the CSV file.")
+                raise ValueError(f"Column '{col}' not found in the Excel file.")
 
         print("Logging: Required columns found.")
 
@@ -100,4 +92,4 @@ def process_csv_year_data():
         print(f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
-    process_csv_year_data()
+    process_excel_year_data()

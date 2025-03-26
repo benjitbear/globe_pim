@@ -22,6 +22,7 @@ body_type_mapping = {
 import pandas as pd
 import argparse
 import logging
+import numpy as np  # Import numpy for checking NaN
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -29,8 +30,10 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 def process_excel_data(excel_file, print_to_terminal=False, verbose=False):
     """
     Processes an Excel file to generate a new spreadsheet or print to the terminal
-    with mapped body types and the number of doors.
-    Handles partial matches in the 'body_type' column.
+    with mapped body types and the number of doors. Handles empty or non-numeric
+    values in the 'doors' column gracefully. Skips rows with missing core data
+    and logs a warning. Handles partial matches in the 'body_type' column.
+    Ensures all components of the description are strings.
 
     Args:
         excel_file (str): Path to the input Excel file.
@@ -58,14 +61,19 @@ def process_excel_data(excel_file, print_to_terminal=False, verbose=False):
                 logging.debug(f"Processing row index: {index}")
                 logging.debug(f"Row data: {row.to_dict()}")
             try:
-                make = row['make']
-                model = row['model']
-                year_text = row['year_text']
-                body_type_raw = str(row['body_type']).upper()
-                doors = row['doors']
-            except KeyError as e:
-                logging.error(f"Error accessing column: {e}. Please ensure the Excel file has columns named 'make', 'model', 'year_text', 'body_type', and 'doors'.")
-                raise  # Re-raise the exception to stop processing
+                make = row.get('make')
+                model = row.get('model')
+                year_text = row.get('year_text')
+                body_type_raw = str(row.get('body_type', '')).upper()
+                doors = row.get('doors')
+                if any(pd.isna(val) for val in [make, model, year_text, body_type_raw]):
+                    logging.warning(f"Skipping row {index} due to missing required data in 'make', 'model', 'year_text', or 'body_type'.")
+                    if verbose:
+                        logging.debug(f"Row data: {row.to_dict()}")
+                    continue # Skip the row if any of the core columns (excluding doors) are missing
+            except Exception as e:
+                logging.error(f"Error accessing row data at index {index}: {e}")
+                continue # Still continue to the next row for other unexpected errors
 
             body_type_mapped = body_type_raw
             for key, value in body_type_mapping.items():
@@ -74,7 +82,23 @@ def process_excel_data(excel_file, print_to_terminal=False, verbose=False):
                     if verbose:
                         logging.debug(f"Mapped '{key}' to '{value}' in '{body_type_raw}', resulting in '{body_type_mapped}'")
 
-            description = f"{make} {model} {year_text} {doors}DR {body_type_mapped}"
+            make_str = str(make) if pd.notna(make) else ''
+            model_str = str(model) if pd.notna(model) else ''
+            year_text_str = str(year_text) if pd.notna(year_text) else ''
+
+            description_parts = [make_str, model_str, year_text_str]
+            if pd.notna(doors):
+                try:
+                    doors_int = int(doors)
+                    description_parts.append(f"{doors_int}DR")
+                except (ValueError, TypeError):
+                    logging.warning(f"Could not convert 'doors' value '{doors}' to integer for description in row {index}. Skipping doors in description.")
+                    if verbose:
+                        logging.debug(f"Row data: {row.to_dict()}")
+            description_parts.append(body_type_mapped)
+
+            description = ' '.join(filter(None, description_parts)).strip()
+
             if verbose:
                 logging.debug(f"Generated description: {description}")
 
@@ -83,11 +107,11 @@ def process_excel_data(excel_file, print_to_terminal=False, verbose=False):
                 if pd.notna(stockcode):
                     output_data.append({
                         'STOCKCODE': stockcode,
-                        'MAKE': make,
-                        'MODEL': model,
-                        'YEAR': year_text,
-                        'DOORS': doors,
-                        'BODY TYPE': body_type_mapped,
+                        'MAKE': make if pd.notna(make) else '',
+                        'MODEL': model if pd.notna(model) else '',
+                        'YEAR': year_text if pd.notna(year_text) else '',
+                        'DOORS': int(doors) if pd.notna(doors) and pd.notna(int(doors)) else '',
+                        'BODY TYPE': body_type_mapped if body_type_mapped.strip() else '',
                         'DESCRIPTION': description
                     })
                     if verbose:
@@ -100,10 +124,10 @@ def process_excel_data(excel_file, print_to_terminal=False, verbose=False):
 
         if print_to_terminal:
             print("\n--- Output (Terminal) ---")
-            print(output_df.to_string())
+            print(output_df.to_string(na_rep='')) # Use na_rep to replace NaN with empty string for terminal output
         else:
             output_file = 'processed_data.xlsx'
-            output_df.to_excel(output_file, index=False)
+            output_df.to_excel(output_file, index=False, na_rep='') # Use na_rep to replace NaN with empty string in Excel
             logging.info(f"Processed data saved to {output_file}")
 
     except FileNotFoundError:
